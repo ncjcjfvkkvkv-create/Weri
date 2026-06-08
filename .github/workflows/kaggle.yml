@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       dataset:
-        description: 'آدرس دیتاست Kaggle (مثال: salikhussaini49/Boxing-pose-dataset)'
+        description: 'آدرس دیتاست Kaggle'
         required: true
         default: 'salikhussaini49/Boxing-pose-dataset'
         type: string
       output_folder:
-        description: 'نام پوشه خروجی در ریپازیتوری'
+        description: 'نام پوشه خروجی'
         required: true
         default: 'kaggle_downloads'
         type: string
@@ -18,7 +18,7 @@ jobs:
   download:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 بررسی کد (Checkout)
+      - name: 📥 بررسی کد
         uses: actions/checkout@v4
 
       - name: 🐍 نصب پایتون
@@ -26,17 +26,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 📦 نصب kagglehub
+      - name: 📦 نصب کتابخانه‌ها
         run: |
-          pip install kagglehub
+          pip install kagglehub kaggle
 
-      - name: 🔑 تنظیم توکن Kaggle (روش صحیح)
+      - name: 🔑 تنظیم Kaggle (روش قدیمی)
         run: |
           mkdir -p ~/.kaggle
-          # ساخت فایل kaggle.json با فرمت درست
-          echo '{"token":"${{ secrets.KAGGLE_API_TOKEN }}"}' > ~/.kaggle/kaggle.json
+          echo '{"username":"${{ secrets.KAGGLE_USERNAME }}","key":"${{ secrets.KAGGLE_KEY }}"}' > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
-          echo "✅ توکن Kaggle تنظیم شد."
+          echo "✅ تنظیمات Kaggle انجام شد."
 
       - name: 📥 دانلود دیتاست
         run: |
@@ -52,7 +51,7 @@ jobs:
           
           try:
               download_path = kagglehub.dataset_download(dataset_path)
-              print(f'✅ دانلود کامل شد. مسیر: {download_path}')
+              print(f'✅ دانلود کامل شد: {download_path}')
               
               if os.path.exists(output_dir):
                   shutil.rmtree(output_dir)
