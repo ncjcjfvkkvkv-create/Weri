@@ -23,7 +23,7 @@ on:
       upload_method:
         description: "Upload Method"
         required: true
-        default: "repository"
+        default: "release"
         type: choice
         options:
           - repository
@@ -72,37 +72,34 @@ jobs:
             "$FILE_URL"
 
           echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
-          echo "filepath=temp_dl/$FILENAME" >> "$GITHUB_OUTPUT"
 
-      - name: Create Split Archive
+      - name: Create Split Archive و حذف فایل اصلی
         id: archive
         shell: bash
         run: |
-          FILEPATH="${{ steps.download.outputs.filepath }}"
+          FILENAME="${{ steps.download.outputs.filename }}"
           PASS="${{ github.event.inputs.zip_password }}"
           THRESH_MB="${{ github.event.inputs.max_part_mb }}"
 
-          if [[ -z "$THRESH_MB" || "$THRESH_MB" -le 0 || "$THRESH_MB" -gt 1900 ]]; then
-            THRESH_MB=1800
+          if [[ -z "$THRESH_MB" || "$THRESH_MB" -le 0 ]]; then
+            THRESH_MB=90
           fi
-
-          BASENAME=$(basename "$FILEPATH")
 
           cd temp_dl || exit 1
 
-          ARCHIVE_BASE="${BASENAME%.*}_$(date +%Y%m%d_%H%M%S)"
+          ARCHIVE_BASE="${FILENAME%.*}_$(date +%Y%m%d_%H%M%S)"
 
           if [ -n "$PASS" ]; then
-            7z a -p"$PASS" -mhe=on -mx=3 -v${THRESH_MB}m "${ARCHIVE_BASE}.7z" "$BASENAME"
+            7z a -p"$PASS" -mhe=on -mx=3 -v${THRESH_MB}m "${ARCHIVE_BASE}.7z" "$FILENAME"
           else
-            7z a -mx=3 -v${THRESH_MB}m "${ARCHIVE_BASE}.7z" "$BASENAME"
+            7z a -mx=3 -v${THRESH_MB}m "${ARCHIVE_BASE}.7z" "$FILENAME"
           fi
 
-          if [ -f "${ARCHIVE_BASE}.7z.001" ] && [ ! -f "${ARCHIVE_BASE}.7z.002" ]; then
-            mv "${ARCHIVE_BASE}.7z.001" "${ARCHIVE_BASE}.7z"
-          fi
+          # 🔑 مهم: حذف فایل اصلی
+          rm -f "$FILENAME"
 
-          echo "archive_name=${ARCHIVE_BASE}.7z" >> "$GITHUB_OUTPUT"
+          echo "✅ فقط تکه‌ها نگه داشته شدند:"
+          ls -lh *.7z.*
 
           cd ..
 
@@ -112,7 +109,7 @@ jobs:
         run: |
           echo "date=$(date '+%Y-%m-%d %H:%M:%S')" >> "$GITHUB_OUTPUT"
 
-      - name: Push to Repository
+      - name: Push to Repository (فقط تکه‌ها)
         if: github.event.inputs.upload_method == 'repository'
         shell: bash
         run: |
@@ -121,7 +118,8 @@ jobs:
 
           mkdir -p downloads
 
-          mv temp_dl/* downloads/ 2>/dev/null || true
+          # فقط تکه‌های 7z رو منتقل کن
+          mv temp_dl/*.7z* downloads/ 2>/dev/null || true
 
           git add downloads/
 
@@ -129,19 +127,21 @@ jobs:
 
           git push
 
-      - name: Upload to GitHub Releases
+      - name: Upload to GitHub Releases (فقط تکه‌ها)
         if: github.event.inputs.upload_method == 'release'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.release_tag != '' && github.event.inputs.release_tag || format('direct-{0}', github.run_number) }}
-          name: Direct Download Release
+          name: Direct Download Release - ${{ steps.download.outputs.filename }}
           body: |
-            Direct download completed.
-
-            File: ${{ steps.download.outputs.filename }}
-            Date: ${{ steps.get_date.outputs.date }}
-          files: temp_dl/*
-
+            ✅ دانلود کامل شد!
+            
+            فایل: ${{ steps.download.outputs.filename }}
+            تاریخ: ${{ steps.get_date.outputs.date }}
+            
+            **نحوه Extract:**
+            تمام تکه‌ها را دانلود کرده و روی فایل .7z.001 کلیک راست → Extract Here
+          files: temp_dl/*.7z.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
