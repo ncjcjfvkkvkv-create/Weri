@@ -26,22 +26,19 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 📦 نصب کتابخانه kagglehub
+      - name: 📦 نصب kagglehub
         run: |
           pip install kagglehub
 
-      - name: 🔑 تنظیم توکن Kaggle
+      - name: 🔑 تنظیم توکن Kaggle (روش صحیح)
         run: |
           mkdir -p ~/.kaggle
-          if [ -n "${{ secrets.KAGGLE_API_TOKEN }}" ]; then
-            echo "${{ secrets.KAGGLE_API_TOKEN }}" > ~/.kaggle/access_token
-            chmod 600 ~/.kaggle/access_token
-            echo "✅ توکن Kaggle با موفقیت تنظیم شد."
-          else
-            echo "⚠️ هیچ توکنی یافت نشد. فقط دیتاست‌های عمومی قابل دانلود هستند."
-          fi
+          # ساخت فایل kaggle.json با فرمت درست
+          echo '{"token":"${{ secrets.KAGGLE_API_TOKEN }}"}' > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "✅ توکن Kaggle تنظیم شد."
 
-      - name: 📥 دانلود دیتاست از Kaggle
+      - name: 📥 دانلود دیتاست
         run: |
           python -c "
           import os
@@ -61,20 +58,20 @@ jobs:
                   shutil.rmtree(output_dir)
               
               shutil.copytree(download_path, output_dir)
-              print(f'📁 فایل‌ها به پوشه {output_dir} کپی شدند.')
+              print(f'📁 فایل‌ها به {output_dir} کپی شدند.')
               
               files = os.listdir(output_dir)
-              print(f'📄 فایل‌های موجود: {files}')
+              print(f'📄 فایل‌ها: {files}')
               
           except Exception as e:
               print(f'❌ خطا: {e}')
               exit(1)
           "
 
-      - name: 📤 کامیت فایل‌ها به ریپازیتوری
+      - name: 📤 کامیت به ریپازیتوری
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add ${{ github.event.inputs.output_folder }}
-          git diff --quiet && git diff --staged --quiet || git commit -m "📦 اضافه شدن دیتاست از Kaggle: ${{ github.event.inputs.dataset }}"
+          git diff --quiet && git diff --staged --quiet || git commit -m "📦 اضافه شدن دیتاست: ${{ github.event.inputs.dataset }}"
           git push
