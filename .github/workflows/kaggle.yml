@@ -1,0 +1,80 @@
+name: 📊 دانلود از Kaggle
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: 'آدرس دیتاست Kaggle (مثال: salikhussaini49/Boxing-pose-dataset)'
+        required: true
+        default: 'salikhussaini49/Boxing-pose-dataset'
+        type: string
+      output_folder:
+        description: 'نام پوشه خروجی در ریپازیتوری'
+        required: true
+        default: 'kaggle_downloads'
+        type: string
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 بررسی کد (Checkout)
+        uses: actions/checkout@v4
+
+      - name: 🐍 نصب پایتون
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 📦 نصب کتابخانه kagglehub
+        run: |
+          pip install kagglehub
+
+      - name: 🔑 تنظیم توکن Kaggle
+        run: |
+          mkdir -p ~/.kaggle
+          if [ -n "${{ secrets.KAGGLE_API_TOKEN }}" ]; then
+            echo "${{ secrets.KAGGLE_API_TOKEN }}" > ~/.kaggle/access_token
+            chmod 600 ~/.kaggle/access_token
+            echo "✅ توکن Kaggle با موفقیت تنظیم شد."
+          else
+            echo "⚠️ هیچ توکنی یافت نشد. فقط دیتاست‌های عمومی قابل دانلود هستند."
+          fi
+
+      - name: 📥 دانلود دیتاست از Kaggle
+        run: |
+          python -c "
+          import os
+          import shutil
+          import kagglehub
+          
+          dataset_path = '${{ github.event.inputs.dataset }}'
+          output_dir = '${{ github.event.inputs.output_folder }}'
+          
+          print(f'⏳ شروع دانلود از {dataset_path}...')
+          
+          try:
+              download_path = kagglehub.dataset_download(dataset_path)
+              print(f'✅ دانلود کامل شد. مسیر: {download_path}')
+              
+              if os.path.exists(output_dir):
+                  shutil.rmtree(output_dir)
+              
+              shutil.copytree(download_path, output_dir)
+              print(f'📁 فایل‌ها به پوشه {output_dir} کپی شدند.')
+              
+              files = os.listdir(output_dir)
+              print(f'📄 فایل‌های موجود: {files}')
+              
+          except Exception as e:
+              print(f'❌ خطا: {e}')
+              exit(1)
+          "
+
+      - name: 📤 کامیت فایل‌ها به ریپازیتوری
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add ${{ github.event.inputs.output_folder }}
+          git diff --quiet && git diff --staged --quiet || git commit -m "📦 اضافه شدن دیتاست از Kaggle: ${{ github.event.inputs.dataset }}"
+          git push
