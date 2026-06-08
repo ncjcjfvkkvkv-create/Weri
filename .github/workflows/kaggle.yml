@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       dataset:
-        description: 'آدرس دیتاست Kaggle (مثال: salikhussaini49/Boxing-pose-dataset)'
+        description: 'آدرس دیتاست Kaggle'
         required: true
         default: 'salikhussaini49/Boxing-pose-dataset'
         type: string
       output_folder:
-        description: 'نام پوشه خروجی در ریپازیتوری'
+        description: 'نام پوشه خروجی'
         required: true
         default: 'kaggle_downloads'
         type: string
@@ -18,7 +18,7 @@ jobs:
   download:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 بررسی کد (Checkout)
+      - name: 📥 بررسی کد
         uses: actions/checkout@v4
 
       - name: 🐍 نصب پایتون
@@ -26,35 +26,34 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 📦 نصب kaggle (فقط)
+      - name: 📦 نصب kaggle
         run: |
           pip install kaggle
 
-      - name: 🔑 تنظیم Kaggle (روش قدیمی)
+      - name: 🔑 تنظیم Kaggle
         run: |
           mkdir -p ~/.kaggle
           echo '{"username":"${{ secrets.KAGGLE_USERNAME }}","key":"${{ secrets.KAGGLE_KEY }}"}' > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
           echo "✅ تنظیمات Kaggle انجام شد."
 
-      - name: 📥 دانلود دیتاست با kaggle CLI
+      - name: 📥 دانلود دیتاست
         run: |
           DATASET="${{ github.event.inputs.dataset }}"
           OUTPUT_DIR="${{ github.event.inputs.output_folder }}"
           
           echo "⏳ شروع دانلود از $DATASET..."
           
-          # دانلود با kaggle CLI
           kaggle datasets download "$DATASET" --unzip -p "./$OUTPUT_DIR"
           
           echo "✅ دانلود کامل شد."
           echo "📄 فایل‌های دانلود شده:"
           ls -la "./$OUTPUT_DIR"
 
-      - name: 📤 کامیت فایل‌ها به ریپازیتوری
+      - name: 📤 کامیت فایل‌ها
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add ${{ github.event.inputs.output_folder }}
-          git diff --quiet && git diff --staged --quiet || git commit -m "📦 اضافه شدن دیتاست از Kaggle: ${{ github.event.inputs.dataset }}"
+          git diff --quiet && git diff --staged --quiet || git commit -m "📦 اضافه شدن دیتاست: ${{ github.event.inputs.dataset }}"
           git push
