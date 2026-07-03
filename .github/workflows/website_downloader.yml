@@ -1,4 +1,4 @@
-name: Download Full Website
+name: Download Full Website (Optimized)
 
 on:
   workflow_dispatch:
@@ -7,22 +7,30 @@ on:
         description: 'آدرس کامل سایت (مثلا https://example.com)'
         required: true
         type: string
+      max_retries:
+        description: 'تعداد دفعات تلاش مجدد در صورت خطا'
+        required: false
+        default: 3
+        type: number
 
 jobs:
   download_website:
     runs-on: ubuntu-latest
+    timeout-minutes: 60  # افزایش زمان مجاز به ۶۰ دقیقه
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install wget
-      run: sudo apt-get update && sudo apt-get install -y wget
+    - name: Install wget and httrack
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget httrack
 
     - name: Create output directory
       run: mkdir -p downloaded_site
 
-    - name: Download entire site with wget
+    - name: Download entire site with wget (Optimized)
       run: |
         wget \
           --mirror \
@@ -31,10 +39,41 @@ jobs:
           --convert-links \
           --no-parent \
           --directory-prefix=downloaded_site \
+          --wait=2 \                    # تأخیر ۲ ثانیه‌ای بین درخواست‌ها
+          --limit-rate=500k \            # محدودیت سرعت دانلود برای جلوگیری از بن شدن
+          --random-wait \                # تأخیر تصادفی برای شبیه‌سازی کاربر واقعی
+          --tries=${{ github.event.inputs.max_retries }} \  # تلاش مجدد در صورت خطا
+          --retry-connrefused \          # تلاش مجدد در صورت قطع اتصال
+          --timeout=30 \                 # زمان انتظار برای پاسخ سرور
+          --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+          --reject="*.jpg,*.png,*.webp,*.mp4,*.avi" \  # عدم دانلود تصاویر و ویدیوها برای سرعت بیشتر
+          --include-directories=/product,/category,/orderinfo,/api/v1,/blog \  # فقط پوشه‌های مهم
           ${{ github.event.inputs.site_url }}
 
-    - name: Upload downloaded site as artifact
+    - name: Continue download if interrupted (Resume)
+      if: failure()
+      run: |
+        echo "⚠️ Download was interrupted. Resuming..."
+        wget \
+          --continue \
+          --mirror \
+          --page-requisites \
+          --adjust-extension \
+          --convert-links \
+          --no-parent \
+          --directory-prefix=downloaded_site \
+          --wait=2 \
+          --limit-rate=500k \
+          --tries=${{ github.event.inputs.max_retries }} \
+          --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+          ${{ github.event.inputs.site_url }}
+
+    - name: Compress downloaded site
+      run: tar -czf downloaded_site.tar.gz downloaded_site/
+
+    - name: Upload compressed site as artifact
       uses: actions/upload-artifact@v4
       with:
         name: downloaded-site
-        path: downloaded_site/
+        path: downloaded_site.tar.gz
+        retention-days: 7  # حذف خودکار بعد از ۷ روز
