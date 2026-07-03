@@ -25,9 +25,16 @@ jobs:
       - name: ۲. نصب ابزارهای مورد نیاز
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq wget unzip html-xml-utils
+          sudo apt-get install -y jq wget unzip
 
-      - name: ۳. دریافت لینک دانلود و دانلود فایل
+      - name: ۳. نصب htmlq (برای پردازش حرفه‌ای HTML)
+        run: |
+          wget -q -O /tmp/htmlq.tar.gz https://github.com/mgdm/htmlq/releases/latest/download/htmlq-x86_64-linux.tar.gz
+          tar -xzf /tmp/htmlq.tar.gz -C /tmp
+          sudo mv /tmp/htmlq /usr/local/bin/
+          sudo chmod +x /usr/local/bin/htmlq
+
+      - name: ۴. دریافت و دانلود فایل
         id: download
         run: |
           mkdir -p downloads
@@ -35,40 +42,61 @@ jobs:
           
           echo "🔍 در حال جستجوی $PACKAGE در APKMirror..."
           
-          # 1. دریافت صفحه اصلی اپ
-          PAGE_URL="https://www.apkmirror.com/apk/netmarble-corporation/game-of-thrones-kingsroad/"
-          echo "📄 دریافت صفحه: $PAGE_URL"
+          # صفحه اصلی بازی
+          BASE_URL="https://www.apkmirror.com/apk/netmarble-corporation/game-of-thrones-kingsroad/"
           
-          # دریافت محتوای صفحه با هدرهای مناسب
+          # دریافت محتوای صفحه
           curl -s -L \
             -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
             -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" \
             -H "Accept-Language: en-US,en;q=0.9" \
             -H "Referer: https://www.apkmirror.com/" \
-            "$PAGE_URL" -o temp_page.html
+            "$BASE_URL" -o temp_page.html
           
-          # 2. پیدا کردن لینک دانلود (با جستجوی الگوی دانلود)
-          echo "🔎 در حال پیدا کردن لینک دانلود..."
+          # استخراج لینک آخرین نسخه با استفاده از htmlq
+          DOWNLOAD_PAGE_LINK=$(cat temp_page.html | htmlq -a href 'a[class="btn btn-primary btn-md downloadLink"]' | head -1)
           
-          # پیدا کردن لینک دانلود از صفحه
-          DOWNLOAD_LINK=$(grep -oP 'https://www.apkmirror.com/wp-content/themes/APKMirror/download.php\?id=[0-9]+' temp_page.html | head -1)
+          if [ -z "$DOWNLOAD_PAGE_LINK" ]; then
+            echo "❌ لینک دانلود پیدا نشد!"
+            echo "🔄 تلاش با روش جایگزین..."
+            # روش جایگزین: جستجوی لینک با grep
+            DOWNLOAD_PAGE_LINK=$(grep -oP 'https://www.apkmirror.com/apk/[^"]+/download/\?key=[^"]+' temp_page.html | head -1)
+          fi
           
-          if [ -z "$DOWNLOAD_LINK" ]; then
+          if [ -z "$DOWNLOAD_PAGE_LINK" ]; then
             echo "❌ لینک دانلود پیدا نشد!"
             exit 1
           fi
           
-          echo "✅ لینک دانلود پیدا شد: $DOWNLOAD_LINK"
+          echo "✅ لینک دانلود پیدا شد: $DOWNLOAD_PAGE_LINK"
           
-          # 3. دانلود فایل نهایی
-          echo "⬇️ شروع دانلود فایل..."
-          curl -L -b cookies.txt \
+          # دریافت صفحه دانلود نهایی
+          echo "📄 دریافت صفحه دانلود..."
+          curl -s -L \
             -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-            -H "Referer: $PAGE_URL" \
-            -H "Accept: application/vnd.android.package-archive" \
-            "$DOWNLOAD_LINK" -o downloads/app.apk
+            -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" \
+            -H "Referer: $BASE_URL" \
+            "$DOWNLOAD_PAGE_LINK" -o final_download_page.html
           
-          # 4. بررسی فایل دانلود شده
+          # پیدا کردن لینک نهایی APK
+          FINAL_LINK=$(cat final_download_page.html | htmlq -a href 'a[class="downloadButton"]' | head -1)
+          
+          if [ -z "$FINAL_LINK" ]; then
+            FINAL_LINK=$(grep -oP 'https://www.apkmirror.com/wp-content/themes/APKMirror/download.php\?id=[0-9]+' final_download_page.html | head -1)
+          fi
+          
+          if [ -z "$FINAL_LINK" ]; then
+            echo "❌ لینک نهایی پیدا نشد!"
+            exit 1
+          fi
+          
+          echo "⬇️ شروع دانلود فایل..."
+          curl -L \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            -H "Referer: $DOWNLOAD_PAGE_LINK" \
+            -H "Accept: application/vnd.android.package-archive" \
+            "$FINAL_LINK" -o downloads/app.apk
+          
           if [ ! -f downloads/app.apk ] || [ ! -s downloads/app.apk ]; then
             echo "❌ خطا در دانلود فایل!"
             exit 1
@@ -78,7 +106,7 @@ jobs:
           echo "✅ فایل با موفقیت دانلود شد! حجم: $FILE_SIZE"
           echo "file_path=downloads/app.apk" >> $GITHUB_OUTPUT
 
-      - name: ۴. ساخت نسخه (Release)
+      - name: ۵. ساخت نسخه (Release)
         if: steps.download.outputs.file_path != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -91,7 +119,7 @@ jobs:
             --title "$RELEASE_NAME" \
             --notes "فایل بسته ${{ inputs.package_name }} به صورت خودکار از APKMirror دانلود شده است."
 
-      - name: ۵. آپلود فایل به عنوان Artifact
+      - name: ۶. آپلود فایل به عنوان Artifact
         if: steps.download.outputs.file_path != ''
         uses: actions/upload-artifact@v4
         with:
