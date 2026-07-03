@@ -8,11 +8,6 @@ on:
         required: true
         type: string
         default: 'com.netmarble.gotasia'
-      version_code:
-        description: 'کد نسخه (اختیاری - آخرین نسخه به صورت خودکار انتخاب می‌شود)'
-        required: false
-        type: string
-        default: ''
 
 jobs:
   download-from-apkmirror:
@@ -30,50 +25,60 @@ jobs:
       - name: ۲. نصب ابزارهای مورد نیاز
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq wget unzip
+          sudo apt-get install -y jq wget unzip html-xml-utils
 
-      - name: ۳. نصب Python و کتابخانه‌ها
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: ۴. نصب apkmirror-downloader
-        run: |
-          pip install apkmirror-downloader
-
-      - name: ۵. دریافت آخرین نسخه و دانلود
+      - name: ۳. دریافت لینک دانلود و دانلود فایل
         id: download
         run: |
           mkdir -p downloads
-          
-          # دریافت اطلاعات آخرین نسخه از APKMirror
-          echo "در حال دریافت اطلاعات آخرین نسخه از APKMirror..."
-          
-          # شناسه بسته را دریافت کن
           PACKAGE="${{ inputs.package_name }}"
-          VERSION_CODE="${{ inputs.version_code }}"
           
-          # اگر کد نسخه مشخص نشده، از آخرین نسخه استفاده کن
-          if [ -z "$VERSION_CODE" ]; then
-            echo "کد نسخه مشخص نشده، دریافت آخرین نسخه..."
-            # دریافت آخرین نسخه با apkmirror-downloader
-            apkmirror-downloader --package $PACKAGE --output downloads/
-          else
-            echo "دریافت نسخه با کد: $VERSION_CODE"
-            apkmirror-downloader --package $PACKAGE --version $VERSION_CODE --output downloads/
-          fi
+          echo "🔍 در حال جستجوی $PACKAGE در APKMirror..."
           
-          # پیدا کردن فایل دانلود شده
-          DOWNLOADED_FILE=$(ls -1 downloads/*.apk 2>/dev/null | head -n1)
-          if [ -z "$DOWNLOADED_FILE" ]; then
-            echo "خطا: هیچ فایلی دانلود نشد!"
+          # 1. دریافت صفحه اصلی اپ
+          PAGE_URL="https://www.apkmirror.com/apk/netmarble-corporation/game-of-thrones-kingsroad/"
+          echo "📄 دریافت صفحه: $PAGE_URL"
+          
+          # دریافت محتوای صفحه با هدرهای مناسب
+          curl -s -L \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+            -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" \
+            -H "Accept-Language: en-US,en;q=0.9" \
+            -H "Referer: https://www.apkmirror.com/" \
+            "$PAGE_URL" -o temp_page.html
+          
+          # 2. پیدا کردن لینک دانلود (با جستجوی الگوی دانلود)
+          echo "🔎 در حال پیدا کردن لینک دانلود..."
+          
+          # پیدا کردن لینک دانلود از صفحه
+          DOWNLOAD_LINK=$(grep -oP 'https://www.apkmirror.com/wp-content/themes/APKMirror/download.php\?id=[0-9]+' temp_page.html | head -1)
+          
+          if [ -z "$DOWNLOAD_LINK" ]; then
+            echo "❌ لینک دانلود پیدا نشد!"
             exit 1
           fi
           
-          echo "فایل با موفقیت دانلود شد: $DOWNLOADED_FILE"
-          echo "file_path=$DOWNLOADED_FILE" >> $GITHUB_OUTPUT
+          echo "✅ لینک دانلود پیدا شد: $DOWNLOAD_LINK"
+          
+          # 3. دانلود فایل نهایی
+          echo "⬇️ شروع دانلود فایل..."
+          curl -L -b cookies.txt \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            -H "Referer: $PAGE_URL" \
+            -H "Accept: application/vnd.android.package-archive" \
+            "$DOWNLOAD_LINK" -o downloads/app.apk
+          
+          # 4. بررسی فایل دانلود شده
+          if [ ! -f downloads/app.apk ] || [ ! -s downloads/app.apk ]; then
+            echo "❌ خطا در دانلود فایل!"
+            exit 1
+          fi
+          
+          FILE_SIZE=$(du -h downloads/app.apk | cut -f1)
+          echo "✅ فایل با موفقیت دانلود شد! حجم: $FILE_SIZE"
+          echo "file_path=downloads/app.apk" >> $GITHUB_OUTPUT
 
-      - name: ۶. ساخت نسخه (Release) در گیت‌هاب
+      - name: ۴. ساخت نسخه (Release)
         if: steps.download.outputs.file_path != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -86,18 +91,10 @@ jobs:
             --title "$RELEASE_NAME" \
             --notes "فایل بسته ${{ inputs.package_name }} به صورت خودکار از APKMirror دانلود شده است."
 
-      - name: ۷. آپلود فایل به عنوان Artifact
+      - name: ۵. آپلود فایل به عنوان Artifact
         if: steps.download.outputs.file_path != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.package_name }}-apkmirror
-          path: downloads/*.apk
+          path: downloads/app.apk
           retention-days: 7
-
-      - name: ۸. نمایش اطلاعات فایل دانلود شده
-        if: steps.download.outputs.file_path != ''
-        run: |
-          FILE="${{ steps.download.outputs.file_path }}"
-          echo "📁 فایل دانلود شده: $(basename $FILE)"
-          echo "📏 حجم فایل: $(du -h $FILE | cut -f1)"
-          echo "🔐 هش SHA-256: $(sha256sum $FILE | cut -d' ' -f1)"
