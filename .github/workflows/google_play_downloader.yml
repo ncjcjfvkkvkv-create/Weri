@@ -45,7 +45,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-17-jre-headless apksigner python3 python3-venv python3-pip curl git
+          sudo apt-get install -y openjdk-17-jre-headless apksigner python3 python3-venv python3-pip curl git p7zip-full
 
       - name: Clone gplay-apk-downloader
         run: |
@@ -53,21 +53,20 @@ jobs:
           cd gplay-apk-downloader
           ./setup.sh
 
-      - name: Authenticate with Google Play
-        run: |
-          cd gplay-apk-downloader
-          echo "y" | ./gplay auth
-          echo "Authentication completed."
-
       - name: Download APK
         id: download
         run: |
           cd gplay-apk-downloader
+          export DISPENSER_URL="https://gplay-api.vercel.app/api"
           ARCH="${{ inputs.architecture }}"
           MERGE="${{ inputs.merge_splits }}"
           OUTPUT_DIR="../${{ inputs.output_folder }}"
           
-          CMD="./gplay download ${{ inputs.package_name }} -a $ARCH -o $OUTPUT_DIR"
+          # First authenticate
+          echo "y" | ./gplay auth --dispenser $DISPENSER_URL
+          
+          # Then download
+          CMD="./gplay download ${{ inputs.package_name }} -a $ARCH -o $OUTPUT_DIR --dispenser $DISPENSER_URL"
           if [ "$MERGE" = "true" ]; then
             CMD="$CMD -m"
           fi
@@ -102,7 +101,6 @@ jobs:
           PACKAGE_NAME="${{ inputs.package_name }}"
           ARCH="${{ inputs.architecture }}"
           
-          # Create archive name
           if [ "${{ inputs.merge_splits }}" = "true" ]; then
             ARCHIVE_NAME="${PACKAGE_NAME}_${ARCH}_merged_${TIMESTAMP}"
           else
@@ -111,18 +109,14 @@ jobs:
           
           cd "${{ inputs.output_folder }}"
           
-          # Compress and split the downloaded file(s)
           if [ "${{ inputs.merge_splits }}" = "true" ]; then
-            # Single APK file - split into chunks
             7z a -mx=3 -v85m "${ARCHIVE_NAME}.7z" "$(basename "$DOWNLOADED_FILE")"
           else
-            # Multiple split files - use separate archive for each
             mkdir -p "${ARCHIVE_NAME}_contents"
             cp "$(basename "$DOWNLOADED_FILE")" "${ARCHIVE_NAME}_contents/"
             7z a -mx=3 -v85m "${ARCHIVE_NAME}.7z" "${ARCHIVE_NAME}_contents/"
           fi
           
-          # Rename single-chunk archive to .7z
           if [ -f "${ARCHIVE_NAME}.7z.001" ] && [ ! -f "${ARCHIVE_NAME}.7z.002" ]; then
             mv "${ARCHIVE_NAME}.7z.001" "${ARCHIVE_NAME}.7z"
           fi
@@ -133,7 +127,6 @@ jobs:
           if [[ -n "$DOWNLOADED_FILE" && -f "$DOWNLOADED_FILE" ]]; then
             rm "$DOWNLOADED_FILE"
           fi
-          # Also remove any extracted directories
           rm -rf "${{ inputs.output_folder }}"/*_contents/
 
       - name: Commit and push
