@@ -1,0 +1,103 @@
+name: دانلود از APKMirror
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'شناسه بسته (مثلاً com.netmarble.gotasia)'
+        required: true
+        type: string
+        default: 'com.netmarble.gotasia'
+      version_code:
+        description: 'کد نسخه (اختیاری - آخرین نسخه به صورت خودکار انتخاب می‌شود)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  download-from-apkmirror:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+
+    steps:
+      - name: ۱. راه‌اندازی مخزن
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: ۲. نصب ابزارهای مورد نیاز
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq wget unzip
+
+      - name: ۳. نصب Python و کتابخانه‌ها
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: ۴. نصب apkmirror-downloader
+        run: |
+          pip install apkmirror-downloader
+
+      - name: ۵. دریافت آخرین نسخه و دانلود
+        id: download
+        run: |
+          mkdir -p downloads
+          
+          # دریافت اطلاعات آخرین نسخه از APKMirror
+          echo "در حال دریافت اطلاعات آخرین نسخه از APKMirror..."
+          
+          # شناسه بسته را دریافت کن
+          PACKAGE="${{ inputs.package_name }}"
+          VERSION_CODE="${{ inputs.version_code }}"
+          
+          # اگر کد نسخه مشخص نشده، از آخرین نسخه استفاده کن
+          if [ -z "$VERSION_CODE" ]; then
+            echo "کد نسخه مشخص نشده، دریافت آخرین نسخه..."
+            # دریافت آخرین نسخه با apkmirror-downloader
+            apkmirror-downloader --package $PACKAGE --output downloads/
+          else
+            echo "دریافت نسخه با کد: $VERSION_CODE"
+            apkmirror-downloader --package $PACKAGE --version $VERSION_CODE --output downloads/
+          fi
+          
+          # پیدا کردن فایل دانلود شده
+          DOWNLOADED_FILE=$(ls -1 downloads/*.apk 2>/dev/null | head -n1)
+          if [ -z "$DOWNLOADED_FILE" ]; then
+            echo "خطا: هیچ فایلی دانلود نشد!"
+            exit 1
+          fi
+          
+          echo "فایل با موفقیت دانلود شد: $DOWNLOADED_FILE"
+          echo "file_path=$DOWNLOADED_FILE" >> $GITHUB_OUTPUT
+
+      - name: ۶. ساخت نسخه (Release) در گیت‌هاب
+        if: steps.download.outputs.file_path != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
+          TAG_NAME="apkmirror-${{ inputs.package_name }}-$TIMESTAMP"
+          RELEASE_NAME="دانلود از APKMirror: ${{ inputs.package_name }} - $TIMESTAMP"
+          
+          gh release create "$TAG_NAME" ${{ steps.download.outputs.file_path }} \
+            --title "$RELEASE_NAME" \
+            --notes "فایل بسته ${{ inputs.package_name }} به صورت خودکار از APKMirror دانلود شده است."
+
+      - name: ۷. آپلود فایل به عنوان Artifact
+        if: steps.download.outputs.file_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.package_name }}-apkmirror
+          path: downloads/*.apk
+          retention-days: 7
+
+      - name: ۸. نمایش اطلاعات فایل دانلود شده
+        if: steps.download.outputs.file_path != ''
+        run: |
+          FILE="${{ steps.download.outputs.file_path }}"
+          echo "📁 فایل دانلود شده: $(basename $FILE)"
+          echo "📏 حجم فایل: $(du -h $FILE | cut -f1)"
+          echo "🔐 هش SHA-256: $(sha256sum $FILE | cut -d' ' -f1)"
