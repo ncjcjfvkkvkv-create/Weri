@@ -11,11 +11,11 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     
-    - name: Download complete website
+    - name: Download website with error handling
       run: |
         mkdir -p downloaded_site
         
-        # دستور زیر بدون هیچ اسپیس اضافی
+        # استفاده از || true برای نادیده گرفتن خطاها
         wget \
           --recursive \
           --level=inf \
@@ -32,13 +32,15 @@ jobs:
           --random-wait \
           --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
           -P downloaded_site \
-          http://www.01010101.shop/
+          http://www.01010101.shop/ || true
         
-        echo "✅ Download completed!"
+        echo "✅ Download completed (errors ignored)"
     
-    - name: Show downloaded files
+    - name: Show download summary
       run: |
-        echo "📊 Total files: $(find downloaded_site -type f 2>/dev/null | wc -l)"
+        echo "📊 Download Summary:"
+        echo "--------------------------------"
+        echo "Total files: $(find downloaded_site -type f 2>/dev/null | wc -l)"
         echo ""
         if [ -d "downloaded_site" ]; then
           echo "📂 Directory size:"
@@ -46,6 +48,9 @@ jobs:
           echo ""
           echo "📁 File types:"
           find downloaded_site -type f 2>/dev/null | sed 's/.*\.//' | sort | uniq -c | sort -rn | head -10
+          echo ""
+          echo "📄 HTML files:"
+          find downloaded_site -name "*.html" 2>/dev/null | head -5
         else
           echo "❌ No files downloaded"
         fi
