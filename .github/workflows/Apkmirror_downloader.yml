@@ -15,14 +15,14 @@ jobs:
       run: |
         mkdir -p downloaded_site
         
-        # این دستور CSS، JS، تصاویر و همه چیز رو دانلود میکنه
+        # دستور زیر بدون هیچ اسپیس اضافی
         wget \
-          --recursive \           # دانلود بازگشتی
-          --level=inf \           # تا هر عمقی بره
-          --no-clobber \          # فایل‌های تکراری رو دوباره دانلود نکن
-          --page-requisites \     # ✅ CSS، JS، تصاویر رو دانلود کن
-          --html-extension \      # پسوند .html به صفحات بده
-          --convert-links \       # لینک‌ها رو برای آفلاین تبدیل کن
+          --recursive \
+          --level=inf \
+          --no-clobber \
+          --page-requisites \
+          --html-extension \
+          --convert-links \
           --restrict-file-names=windows \
           --domains www.01010101.shop \
           --no-parent \
@@ -32,19 +32,23 @@ jobs:
           --random-wait \
           --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
           -P downloaded_site \
-          http://www.01010101.shop/ || true
+          http://www.01010101.shop/
         
         echo "✅ Download completed!"
     
     - name: Show downloaded files
       run: |
-        echo "📊 Total files: $(find downloaded_site -type f | wc -l)"
+        echo "📊 Total files: $(find downloaded_site -type f 2>/dev/null | wc -l)"
         echo ""
-        echo "📁 File types:"
-        find downloaded_site -type f | sed 's/.*\.//' | sort | uniq -c | sort -rn
-        echo ""
-        echo "📂 Directory structure:"
-        ls -la downloaded_site/www.01010101.shop/
+        if [ -d "downloaded_site" ]; then
+          echo "📂 Directory size:"
+          du -sh downloaded_site/ 2>/dev/null
+          echo ""
+          echo "📁 File types:"
+          find downloaded_site -type f 2>/dev/null | sed 's/.*\.//' | sort | uniq -c | sort -rn | head -10
+        else
+          echo "❌ No files downloaded"
+        fi
     
     - name: Upload as artifact
       uses: actions/upload-artifact@v4
@@ -52,3 +56,4 @@ jobs:
         name: complete-website
         path: downloaded_site/
         retention-days: 7
+        if-no-files-found: warn
