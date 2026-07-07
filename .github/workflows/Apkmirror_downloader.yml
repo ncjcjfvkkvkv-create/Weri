@@ -11,10 +11,16 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     
+    - name: Install latest wget
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget
+    
     - name: Download website with wget
       run: |
         mkdir -p downloaded_site
         
+        # استفاده از --tries و --timeout به جای --ignore-errors
         wget \
           --recursive \
           --level=inf \
@@ -25,7 +31,6 @@ jobs:
           --restrict-file-names=windows \
           --domains www.01010101.shop \
           --no-parent \
-          --ignore-errors \
           --tries=3 \
           --timeout=20 \
           --wait=1 \
@@ -33,22 +38,25 @@ jobs:
           --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
           --referer="http://www.01010101.shop/" \
           -P downloaded_site \
-          http://www.01010101.shop/ || echo "⚠️ Some files failed, but continuing..."
+          http://www.01010101.shop/ 2>&1 || true
+        
+        echo "✅ Download completed with possible errors ignored"
     
     - name: Show download summary
       run: |
         echo "📊 Summary of downloaded files:"
         echo "--------------------------------"
-        echo "Total files: $(find downloaded_site -type f | wc -l)"
+        echo "Total files: $(find downloaded_site -type f 2>/dev/null | wc -l)"
         echo ""
-        echo "📁 File types:"
-        find downloaded_site -type f | sed 's/.*\.//' | sort | uniq -c | sort -rn | head -10
-        echo ""
-        echo "📂 Directory structure:"
-        du -sh downloaded_site/
-        echo ""
-        echo "📄 Sample files:"
-        find downloaded_site -type f -name "*.html" | head -5
+        if [ -d "downloaded_site" ]; then
+          echo "📂 Directory size:"
+          du -sh downloaded_site/ 2>/dev/null || echo "Directory empty or not found"
+          echo ""
+          echo "📄 Sample files:"
+          find downloaded_site -type f -name "*.html" 2>/dev/null | head -5 || echo "No HTML files found"
+        else
+          echo "❌ downloaded_site directory not found"
+        fi
     
     - name: Upload as artifact
       uses: actions/upload-artifact@v4
@@ -56,3 +64,4 @@ jobs:
         name: downloaded-site
         path: downloaded_site/
         retention-days: 7
+        if-no-files-found: warn
