@@ -2,8 +2,8 @@ name: دریافت فایل از تلگرام
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  # هر ۱۰ دقیقه
-  workflow_dispatch:  # اجرای دستی
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
 jobs:
   receive-files:
@@ -18,9 +18,9 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: نصب کتابخانه‌ها
+    - name: نصب کتابخانه
       run: |
-        pip install -r requirements.txt
+        pip install telethon
         
     - name: اجرای ربات
       run: |
@@ -30,6 +30,6 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add uploads/ metadata.json
-        git diff --staged --quiet || git commit -m "📦 دریافت فایل‌های جدید از تلگرام"
+        git add uploads/
+        git diff --staged --quiet || git commit -m "📦 دریافت فایل از تلگرام"
         git push || true
