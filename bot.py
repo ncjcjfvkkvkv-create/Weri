@@ -13,39 +13,31 @@ async def main():
     client = TelegramClient("bot_session", API_ID, API_HASH)
     await client.start(bot_token=BOT_TOKEN)
     print("✅ ربات متصل شد!")
-    print("📥 منتظر دریافت فایل... (فقط یک فایل دریافت میکنه و تموم میشه)")
+    print("📥 منتظر دریافت فایل...")
 
-    # فلگ برای اینکه فقط یک فایل دریافت کنه
     file_received = False
 
     @client.on(events.NewMessage)
     async def handler(event):
         nonlocal file_received
         if file_received:
-            return  # اگر قبلاً فایلی دریافت شده، نادیده بگیر
+            return
         
         if event.message.file:
             file_name = event.message.file.name or f"file_{event.message.id}"
             file_path = f"uploads/{file_name}"
             
-            # دانلود فایل
             print(f"📥 دانلود: {file_name}")
             await event.message.download_media(file_path)
             print(f"✅ دانلود شد: {file_path}")
             
-            # ارسال پاسخ به کاربر
             await event.reply(f"✅ فایل {file_name} دریافت شد!")
             
-            # فلگ رو True کن تا دیگه فایلی دریافت نشه
             file_received = True
-            
-            # قطع ارتباط ربات
-            print("⏹️ کار تموم شد! قطع کردن ربات...")
+            print("⏹️ کار تموم شد!")
             await client.disconnect()
-            # خروج از برنامه با کد موفقیت
             sys.exit(0)
 
-    # گوش دادن تا زمانی که فایل دریافت بشه
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
