@@ -1,0 +1,35 @@
+name: دریافت فایل از تلگرام
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # هر ۱۰ دقیقه
+  workflow_dispatch:  # اجرای دستی
+
+jobs:
+  receive-files:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: دریافت کد از مخزن
+      uses: actions/checkout@v3
+      
+    - name: نصب پایتون
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: نصب کتابخانه‌ها
+      run: |
+        pip install -r requirements.txt
+        
+    - name: اجرای ربات
+      run: |
+        python bot.py
+        
+    - name: ذخیره فایل‌ها در مخزن
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add uploads/ metadata.json
+        git diff --staged --quiet || git commit -m "📦 دریافت فایل‌های جدید از تلگرام"
+        git push || true
